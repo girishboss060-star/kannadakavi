@@ -1,1 +1,510 @@
-# kannadakavi
+<!DOCTYPE html>
+<html lang="kn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ಕನ್ನಡ ಕವಿ - Google Sign-In & Sheets Live App</title>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+Tamma+2:wght@500;700&family=Hubballi&family=Noto+Serif+Kannada:wght@400;700&family=Tiro+Kannada&display=swap" rel="stylesheet">
+    <!-- HTML to Canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Official Google Identity Services Library (No Firebase Dependency for Login) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-main: #1c1e21;
+            --text-muted: #65676b;
+            --primary: #e41e3f;
+            --accent: #0866ff;
+            --radius: 12px;
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+            --nav-bg: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Noto Serif Kannada', 'Segoe UI', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* SPLASH SCREEN STYLING */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #1e1b4b, #311042);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            color: white;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        #splash-screen.fade-out { opacity: 0; visibility: hidden; }
+        .splash-logo { font-size: 4rem; background: linear-gradient(to right, #ff7e5f, #feb47b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px; animation: pulse 2s infinite; }
+        .splash-title { font-family: 'Baloo Tamma 2', sans-serif; font-size: 2.2rem; font-weight: bold; letter-spacing: 1px; }
+        .splash-tagline { font-size: 0.95rem; opacity: 0.7; margin-top: 5px; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
+
+        /* GOOGLE LOGIN SCREEN STYLING */
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9000;
+            padding: 30px;
+            text-align: center;
+        }
+
+        #login-screen.hide { display: none; }
+
+        .login-box {
+            width: 100%;
+            max-width: 400px;
+            background-color: #ffffff;
+            padding: 40px 30px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .login-header-logo { font-size: 3.5rem; color: #ea4335; }
+        .login-header-title { font-family: 'Baloo Tamma 2', sans-serif; font-size: 2rem; font-weight: 700; color: #1c1e21; }
+        .login-header-subtitle { font-size: 0.95rem; color: var(--text-muted); line-height: 1.5; }
+        
+        #googleBtnContainer {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        header { background: linear-gradient(135deg, #1e1b4b, #311042); color: white; text-align: center; padding: 15px; flex-shrink: 0; }
+        header h1 { font-family: 'Baloo Tamma 2', sans-serif; font-size: 1.8rem; background: linear-gradient(to right, #ff7e5f, #feb47b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .container { max-width: 600px; width: 100%; margin: 0 auto; padding: 15px 15px 0 15px; display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; }
+        .section-title { font-size: 1.1rem; margin-bottom: 12px; color: var(--text-main); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+        .app-view { display: none; flex-direction: column; flex-grow: 1; overflow-y: auto; padding-bottom: 80px; }
+        .app-view.active-view { display: flex; }
+
+        /* RECYCLER / CARDVIEW */
+        .recyclerview-list { display: flex; flex-direction: column; gap: 15px; }
+        .cardview { background-color: var(--card-bg); border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 15px; display: flex; flex-direction: column; position: relative; border: 1px solid #e4e6eb; }
+
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; margin-top: 12px; }
+        .card-title { font-size: 1.25rem; font-weight: 700; color: #050505; }
+        .card-author { font-size: 0.8rem; color: var(--text-muted); }
+
+        .icon-btn { background: none; border: none; font-size: 1.1rem; color: var(--text-muted); cursor: pointer; }
+        .icon-btn.bookmarked { color: #f59e0b; }
+
+        .card-poem-body { font-size: 1.05rem; line-height: 1.6; color: #050505; white-space: pre-line; text-align: center; background-color: #f8f9fa; padding: 14px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #f0f2f5; }
+        .card-divider { height: 1px; background-color: #e4e6eb; margin-bottom: 6px; }
+        .card-actions-row { display: flex; justify-content: space-between; gap: 4px; }
+
+        .action-item-btn { background: transparent; border: none; color: var(--text-muted); padding: 6px 4px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; justify-content: center; flex-grow: 1; }
+
+        /* CREATE POST */
+        .create-post-form { background: var(--card-bg); padding: 20px; border-radius: var(--radius); box-shadow: var(--card-shadow); display: flex; flex-direction: column; gap: 15px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 0.9rem; font-weight: 600; }
+        .form-group input, .form-group textarea { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; font-size: 0.95rem; }
+        .form-group textarea { height: 120px; resize: none; }
+        .publish-btn { background-color: var(--accent); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
+        /* PROFILE */
+        .profile-header-card { background-color: var(--card-bg); border-radius: var(--radius); padding: 20px; box-shadow: var(--card-shadow); display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+        .profile-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent); margin-bottom: 10px; }
+        .profile-name { font-size: 1.3rem; font-weight: 700; text-align: center; }
+        .profile-bio { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px; text-align: center; }
+        .profile-stats-row { display: flex; justify-content: space-around; width: 100%; border-top: 1px solid #e4e6eb; padding-top: 10px; }
+        .stat-box { display: flex; flex-direction: column; align-items: center; }
+        .stat-value { font-size: 1.1rem; font-weight: 700; }
+        .stat-label { font-size: 0.72rem; color: var(--text-muted); }
+        .logout-btn { background: #fef2f2; border: 1px solid #fecaca; padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; margin-top: 14px; color: #dc2626; display: flex; align-items: center; gap: 4px; }
+
+        /* STUDIO IMAGE EDITOR */
+        .editor-popup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 2000; padding: 10px; }
+        .editor-popup-overlay.open { opacity: 1; pointer-events: auto; }
+        .editor-window { background-color: #ffffff; border-radius: 16px; width: 100%; max-width: 500px; max-height: 95vh; display: flex; flex-direction: column; overflow: hidden; }
+        .editor-header { padding: 12px 20px; border-bottom: 1px solid #e4e6eb; display: flex; justify-content: space-between; align-items: center; }
+        
+        .canvas-preview-area { padding: 25px 15px; background-color: #1a1a1a; display: flex; justify-content: center; align-items: center; overflow-y: auto; flex-grow: 1; min-height: 380px; }
+        .poem-image-card { background: linear-gradient(135deg, #1e1b4b, #311042); background-size: cover; background-position: center; color: white; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; position: relative; overflow: hidden; justify-content: center; align-items: center; width: 320px; height: 320px; }
+        .poem-image-card.ratio-story { width: 270px; height: 480px; } 
+        .poem-image-card.ratio-feed { width: 300px; height: 375px; }  
+
+        .blur-overlay-layer { position: absolute; inset: 12px; background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1; overflow-y: auto; }
+        .app-logo-watermark { position: absolute; bottom: 8px; right: 12px; font-size: 0.65rem; font-weight: bold; opacity: 0.85; background: rgba(0, 0, 0, 0.15); padding: 2px 6px; border-radius: 20px; display: flex; align-items: center; gap: 3px; color: #ffffff !important; z-index: 5; }
+        .studio-single-textarea { background: transparent; border: none; color: white; text-align: center; width: 100%; height: auto; min-height: 90%; outline: none; padding: 4px; font-size: 1.1rem; line-height: 1.6; resize: none; z-index: 2; overflow: hidden; }
+
+        .editor-tools-panel { padding: 15px; background: #ffffff; border-top: 1px solid #e4e6eb; display: flex; flex-direction: column; gap: 12px; max-height: 45vh; overflow-y: auto; }
+        .tool-block { display: flex; flex-direction: column; gap: 6px; }
+        .tool-title { font-size: 0.82rem; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 4px; }
+        .tool-options-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+        .btn-tool { padding: 6px 10px; border: 1px solid #cbd5e1; background: #ffffff; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+        .btn-tool.active-tool { background-color: var(--accent); color: white; border-color: var(--accent); }
+        .font-style-select { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600; outline: none; background: white; cursor: pointer; }
+
+        .studio-footer-actions { display: flex; gap: 10px; margin-top: 5px; }
+        .download-action-btn { background-color: #10b981; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+        /* BOTTOM NAVIGATION */
+        .bottom-nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background-color: var(--nav-bg); box-shadow: 0 -2px 10px rgba(0,0,0,0.08); display: flex; justify-content: space-around; align-items: center; z-index: 999; border-top: 1px solid #e4e6eb; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.68rem; font-weight: 600; cursor: pointer; width: 25%; height: 100%; gap: 2px; }
+        .nav-item i { font-size: 1.15rem; }
+        .nav-item.active-nav { color: var(--accent); }
+        .nav-create-btn { width: 44px; height: 44px; background-color: var(--accent); color: white !important; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(8, 102, 255, 0.3); margin-bottom: 8px; }
+
+        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: #323232; color: white; padding: 10px 20px; border-radius: 20px; font-size: 0.9rem; z-index: 10000; display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- SPLASH SCREEN -->
+    <div id="splash-screen">
+        <div class="splash-logo"><i class="fa-solid fa-feather-pointed"></i></div>
+        <div class="splash-title">ಕನ್ನಡ ಕವಿ</div>
+        <div class="splash-tagline">ಸುರಕ್ಷಿತ ಗೂಗಲ್ ಲಾಗಿನ್ ವ್ಯವಸ್ಥೆ</div>
+    </div>
+
+    <!-- GOOGLE LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-box">
+            <div class="login-header-logo"><i class="fa-brands fa-google" style="color: #4285f4;"></i></div>
+            <div class="login-header-title">ಕನ್ನಡ ಕವಿ ಆಪ್</div>
+            <p class="login-header-subtitle">ಕವನ ಪ್ರಕಟಿಸಲು ಮತ್ತು ಇಮೇಜ್ ಮಾಡಲು ನಿಮ್ಮ ಗೂಗಲ್ ಖಾತೆ ಬಳಸಿ ಲಾಗಿನ್ ಮಾಡಿ</p>
+            
+            <!-- Google Button Auto Render Target Container -->
+            <div id="googleBtnContainer"></div>
+        </div>
+    </div>
+
+    <header><h1>ಕನ್ನಡ ಕವಿ</h1></header>
+
+    <div class="container">
+        <div class="app-view active-view" id="view-home"><div class="recyclerview-list" id="homeRecycler"></div></div>
+        
+        <div class="app-view" id="view-create">
+            <h2 class="section-title"><i class="fa-solid fa-circle-plus" style="color:var(--accent)"></i> ಹೊಸ ಕವನ ಬರೆಯಿರಿ</h2>
+            <div class="create-post-form">
+                <div class="form-group"><label>ಕವನದ ಶೀರ್ಷಿಕೆ</label><input type="text" id="postTitle" placeholder="ಶೀರ್ಷಿಕೆ ಬರೆಯಿರಿ..."></div>
+                <div class="form-group"><label>ನಿಮ್ಮ ಹೆಸರು</label><input type="text" id="postAuthor" readonly style="background:#e4e6eb; color:#65676b; font-weight:bold;"></div>
+                <div class="form-group"><label>ವರ್ಗ</label><select id="postCategory" style="padding:10px;"><option value="love">ಪ್ರೀತಿ</option><option value="nature">ಪ್ರಕೃತಿ</option><option value="life">ಜೀವನ</option></select></div>
+                <div class="form-group"><label>ಕವನದ ಸಾಲುಗಳು</label><textarea id="postContent" placeholder="ಕವನ ಟೈಪ್ ಮಾಡಿ..."></textarea></div>
+                <button class="publish-btn" onclick="publishNewPoem()">ಪ್ರಕಟಿಸಿ</button>
+            </div>
+        </div>
+
+        <div class="app-view" id="view-bookmark"><h2 class="section-title"><i class="fa-solid fa-bookmark" style="color:#f59e0b"></i> ಕಾಯ್ದಿರಿಸಿದ ಕವನಗಳು</h2><div class="recyclerview-list" id="bookmarkRecycler"></div></div>
+
+        <div class="app-view" id="view-profile">
+            <div class="profile-header-card">
+                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150" class="profile-avatar" id="userProfilePic">
+                <div class="profile-name" id="profileUserName">ಗೂಗಲ್ ಬಳಕೆದಾರರು</div>
+                <div class="profile-bio" id="userEmailSub">ಕನ್ನಡ ಕವಿ ಅಕೌಂಟ್ 🖋</div>
+                <div class="profile-stats-row">
+                    <div class="stat-box"><div class="stat-value" id="statsPostCount">0</div><div class="stat-label">ಪೋಸ್ಟ್‌ಗಳು</div></div>
+                    <div class="stat-box"><div class="stat-value" id="statsLikesCount">0</div><div class="stat-label">ಒಟ್ಟು ಲೈಕ್ಸ್</div></div>
+                </div>
+                <button class="logout-btn" onclick="handleGoogleSignOut()"><i class="fa-solid fa-sign-out-alt"></i> ಲಾಗ್‌ಔಟ್</button>
+            </div>
+            <h2 class="section-title"><i class="fa-solid fa-feather-pointed" style="color:var(--accent)"></i> ನನ್ನ ಬರಹಗಳು</h2><div class="recyclerview-list" id="myPoemsRecycler"></div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <div class="bottom-nav-bar">
+        <div class="nav-item active-nav" id="nav-home" onclick="switchView('home')"><i class="fa-solid fa-house"></i><span>ಹೋಮ್</span></div>
+        <div class="nav-item" id="nav-create" onclick="switchView('create')"><div class="nav-create-btn"><i class="fa-solid fa-plus"></i></div></div>
+        <div class="nav-item" id="nav-bookmark" onclick="switchView('bookmark')"><i class="fa-solid fa-bookmark"></i><span>ಬುಕ್‌ಮಾರ್ಕ್</span></div>
+        <div class="nav-item" id="nav-profile" onclick="switchView('profile')"><i class="fa-solid fa-user"></i><span>ಪ್ರೊಫೈಲ್</span></div>
+    </div>
+
+    <!-- STUDIO CANVAS POPUP -->
+    <div class="editor-popup-overlay" id="editorPopup" onclick="closeEditorPopup()">
+        <div class="editor-window" onclick="event.stopPropagation()">
+            <div class="editor-header">
+                <h3><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent)"></i> ಇಮೇಜ್ ಸ್ಟುಡಿಯೋ</h3>
+                <button class="popup-close-btn" onclick="closeEditorPopup()">&times;</button>
+            </div>
+            <div class="canvas-preview-area">
+                <div class="poem-image-card" id="exportTargetCard">
+                    <div class="blur-overlay-layer" id="canvasBlurOverlay">
+                        <div class="app-logo-watermark"><i class="fa-solid fa-feather-pointed"></i> ಕನ್ನಡ ಕವಿ</div>
+                        <textarea class="studio-single-textarea" id="studioSingleBox" oninput="autoExpandTextarea(this)"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="editor-tools-panel">
+                <div class="tool-block">
+                    <span class="tool-title"><i class="fa-solid fa-crop-simple"></i> ಫ್ರೇಮ್ ಸೈಜ್</span>
+                    <div class="tool-options-row">
+                        <button class="btn-tool active-tool" id="ratio-insta" onclick="changeEditorRatio('insta')">Instagram (1:1)</button>
+                        <button class="btn-tool" id="ratio-story" onclick="changeEditorRatio('story')">Story (9:16)</button>
+                        <button class="btn-tool" id="ratio-feed" onclick="changeEditorRatio('feed')">Feed (4:5)</button>
+                    </div>
+                </div>
+                <div class="tool-block">
+                    <span class="tool-title"><i class="fa-solid fa-sliders"></i> ಅಕ್ಷರ ಶೈಲಿ</span>
+                    <div class="tool-options-row">
+                        <select class="font-style-select" id="fontStylePicker" onchange="changeKannadaFont(this.value)">
+                            <option value="'Noto Serif Kannada', serif">Noto Serif (ಸಾಂಪ್ರದಾಯಿಕ)</option>
+                            <option value="'Baloo Tamma 2', sans-serif">Baloo Tamma (ದಪ್ಪ)</option>
+                            <option value="'Hubballi', sans-serif">Hubballi (ಸ್ಟೈಲಿಶ್)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="studio-footer-actions">
+                    <button class="download-action-btn" onclick="generateStudioCanvas('download')"><i class="fa-solid fa-download"></i> ಡೌನ್‌ಲೋಡ್</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toastMessage"></div>
+
+    <script>
+        // =======================================
+        // 🔒 ನಿಮ್ಮ ಲೈವ್ SHEETDB API URL ಜೋಡಿಸಲಾಗಿದೆ!
+        // =======================================
+        const SHEETDB_API_URL = "https://sheetdb.io/api/v1/lrynzg7qi42nn"; 
+
+        let dataset = [];
+        let loggedInUserName = null;
+
+        // GOOGLE IDENTITY SERVICES INITIALIZATION ON APP LOAD
+        window.onload = () => {
+            const savedUser = JSON.parse(localStorage.getItem('g_user_session'));
+            if (savedUser) {
+                loadAuthenticatedUser(savedUser);
+            } else {
+                setTimeout(() => {
+                    document.getElementById('splash-screen').classList.add('fade-out');
+                    initGoogleIdentityServices();
+                }, 1500);
+            }
+        };
+
+        function initGoogleIdentityServices() {
+            google.accounts.id.initialize({
+                client_id: "891828273682-compute@developer.gserviceaccount.com", // ನಿಮ್ಮ ಕ್ಲೈಂಟ್ ಐಡಿ ಶಾರು
+                callback: handleGoogleCredentialResponse,
+                auto_select: false
+            });
+
+            google.accounts.id.renderButton(
+                document.getElementById("googleBtnContainer"),
+                { theme: "outline", size: "large", width: "100%", text: "signin_with" }
+            );
+        }
+
+        function handleGoogleCredentialResponse(response) {
+            const base64Url = response.credential.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            const userData = JSON.parse(jsonPayload);
+            localStorage.setItem('g_user_session', JSON.stringify(userData));
+            loadAuthenticatedUser(userData);
+        }
+
+        function loadAuthenticatedUser(user) {
+            loggedInUserName = user.name;
+            document.getElementById('profileUserName').innerText = user.name;
+            document.getElementById('userEmailSub').innerText = user.email;
+            if(user.picture) document.getElementById('userProfilePic').src = user.picture;
+
+            document.getElementById('login-screen').classList.add('hide');
+            const splash = document.getElementById('splash-screen');
+            if(splash) splash.classList.add('fade-out');
+            
+            fetchPoemsFromGoogleSheet();
+        }
+
+        function handleGoogleSignOut() {
+            if(confirm("ಖಂಡಿತವಾಗಿಯೂ ಲಾಗ್‌ಔಟ್ ಆಗಬೇಕೇ?")) {
+                localStorage.removeItem('g_user_session');
+                loggedInUserName = null;
+                location.reload();
+            }
+        }
+
+        // FETCH DATA FROM SHEET
+        function fetchPoemsFromGoogleSheet() {
+            fetch(SHEETDB_API_URL)
+                .then(res => res.json())
+                .then(data => {
+                    dataset = data.map(item => ({
+                        id: String(item.id),
+                        title: item.title,
+                        author: item.author,
+                        category: item.category,
+                        content: item.content,
+                        likes: parseInt(item.likes) || 0
+                    }));
+                    notifyAllAdapters();
+                }).catch(() => showToast("ಶೀಟ್ ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ."));
+        }
+
+        // UI CARD GENERATOR
+        function makeCardHtml(poem, index) {
+            const bookmarks = JSON.parse(localStorage.getItem('kavana_bookmarks') || '[]');
+            const isSaved = bookmarks.includes(poem.id);
+
+            return `
+                <div class="cardview" id="card-${poem.id}">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">${poem.title}</div>
+                            <div class="card-author"><i class="fa-regular fa-user"></i> ಕವಿ: ${poem.author}</div>
+                        </div>
+                        <div class="top-actions">
+                            <button class="icon-btn ${isSaved ? 'bookmarked' : ''}" onclick="toggleBookmark('${poem.id}')">
+                                <i class="fa-solid fa-bookmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-poem-body">${poem.content}</div>
+                    <div class="card-divider"></div>
+                    <div class="card-actions-row">
+                        <button class="action-item-btn" onclick="likeClick('${poem.id}')">
+                            <i class="fa-solid fa-heart"></i> ಇಷ್ಟ (${poem.likes})
+                        </button>
+                        <button class="action-item-btn" onclick="openImageEditor('${poem.id}')">
+                            <i class="fa-solid fa-paintbrush"></i> ಇಮೇಜ್ ಮಾಡಿ
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function notifyAllAdapters() {
+            const homeRecycler = document.getElementById('homeRecycler');
+            if (homeRecycler) {
+                const homeList = [...dataset].reverse(); 
+                homeRecycler.innerHTML = homeList.map((p, i) => makeCardHtml(p, i)).join('');
+            }
+            
+            const bookmarks = JSON.parse(localStorage.getItem('kavana_bookmarks') || '[]');
+            const favList = dataset.filter(p => bookmarks.includes(p.id));
+            const bookmarkRecycler = document.getElementById('bookmarkRecycler');
+            if (bookmarkRecycler) {
+                bookmarkRecycler.innerHTML = favList.length === 0 ? `<p style="text-align:center;color:var(--text-muted);padding:40px 0;">ಯಾವುದೇ ಕವನ ಸೇವ್ ಮಾಡಿಲ್ಲ.</p>` : favList.map((p, i) => makeCardHtml(p, i)).join('');
+            }
+
+            if(loggedInUserName) {
+                const myPoems = dataset.filter(p => p.author === loggedInUserName);
+                document.getElementById('statsPostCount').innerText = myPoems.length;
+                document.getElementById('statsLikesCount').innerText = myPoems.reduce((acc, c) => acc + c.likes, 0);
+                document.getElementById('myPoemsRecycler').innerHTML = myPoems.length === 0 ? `<p style="text-align:center;color:var(--text-muted);padding:20px 0;">ನೀವು ಕವನ ಬರೆದಿಲ್ಲ.</p>` : myPoems.map((p, i) => makeCardHtml(p, i)).join('');
+            }
+        }
+
+        // WRITE TO SHEET
+        function publishNewPoem() {
+            const title = document.getElementById('postTitle').value.trim();
+            const content = document.getElementById('postContent').value.trim();
+
+            if(!title || !content) { showToast("ಶೀರ್ಷಿಕೆ ಮತ್ತು ಕವನ ಬರೆಯಿರಿ!"); return; }
+
+            const newPoemRow = {
+                id: Date.now().toString(),
+                title: title,
+                author: loggedInUserName,
+                category: document.getElementById('postCategory').value,
+                content: content,
+                likes: 0
+            };
+
+            showToast("ಗೂಗಲ್ ಶೀಟ್‌ಗೆ ಪೋಸ್ಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ...");
+            fetch(SHEETDB_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: [newPoemRow] })
+            })
+            .then(res => res.json())
+            .then(() => {
+                document.getElementById('postTitle').value = '';
+                document.getElementById('postContent').value = '';
+                showToast("ಕವನ ಯಶಸ್ವಿಯಾಗಿ ಪ್ರಕಟವಾಗಿದೆ ಶಾರು! 🎉");
+                fetchPoemsFromGoogleSheet(); 
+                switchView('home');
+            }).catch(() => showToast("ಪೋಸ್ಟ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ."));
+        }
+
+        function likeClick(id) {
+            const poem = dataset.find(p => p.id === id);
+            if (!poem) return;
+            poem.likes += 1; notifyAllAdapters();
+            fetch(`${SHEETDB_API_URL}/id/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: { likes: poem.likes } })
+            });
+        }
+
+        function toggleBookmark(id) {
+            let bookmarks = JSON.parse(localStorage.getItem('kavana_bookmarks') || '[]');
+            if(bookmarks.includes(id)) bookmarks = bookmarks.filter(b => b !== id);
+            else bookmarks.push(id);
+            localStorage.setItem('kavana_bookmarks', JSON.stringify(bookmarks));
+            notifyAllAdapters();
+        }
+
+        function switchView(viewName) {
+            document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active-view'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active-nav'));
+            document.getElementById(`view-${viewName}`).classList.add('active-view');
+            if(document.getElementById(`nav-${viewName}`)) document.getElementById(`nav-${viewName}`).classList.add('active-nav');
+            if (viewName === 'create') document.getElementById('postAuthor').value = loggedInUserName;
+            notifyAllAdapters();
+        }
+
+        // STUDIO CONTROL
+        function openImageEditor(id) { const poem = dataset.find(p => p.id === id); const singleBox = document.getElementById('studioSingleBox'); singleBox.value = `${poem.title}\n\n${poem.content}\n\nಕವಿ: ${poem.author}`; const canvasCard = document.getElementById('exportTargetCard'); canvasCard.style.color = '#ffffff'; singleBox.style.color = '#ffffff'; canvasCard.style.background = 'linear-gradient(135deg, #1e1b4b, #311042)'; changeEditorRatio('insta'); autoExpandTextarea(singleBox); document.getElementById('editorPopup').classList.add('open'); }
+        function closeEditorPopup() { document.getElementById('editorPopup').classList.remove('open'); }
+        function autoExpandTextarea(element) { element.style.height = 'auto'; element.style.height = element.scrollHeight + 'px'; }
+        function changeKannadaFont(fontFamilyString) { document.getElementById('studioSingleBox').style.fontFamily = fontFamilyString; autoExpandTextarea(document.getElementById('studioSingleBox')); }
+        function changeEditorRatio(ratioType) { const target = document.getElementById('exportTargetCard'); target.classList.remove('ratio-story', 'ratio-feed'); document.querySelectorAll('[id^="ratio-"]').forEach(btn => btn.classList.remove('active-tool')); document.getElementById(`ratio-${ratioType}`).classList.add('active-tool'); if (ratioType === 'story') target.classList.add('ratio-story'); else if (ratioType === 'feed') target.classList.add('ratio-feed'); autoExpandTextarea(document.getElementById('studioSingleBox')); }
+        function generateStudioCanvas(actionType) { const target = document.getElementById('exportTargetCard'); const overlay = document.getElementById('canvasBlurOverlay'); showToast("ಚಿತ್ರ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ..."); const originalHeight = target.style.height; if(overlay.scrollHeight > target.clientHeight) target.style.height = (overlay.scrollHeight + 40) + 'px'; html2canvas(target, { useCORS: true, scale: 3, scrollY: -window.scrollY }).then(canvas => { target.style.height = originalHeight; canvas.toBlob(function(blob) { const fileName = `KannadaKavi_${Date.now()}.png`; const fileUrl = URL.createObjectURL(blob); const downloadAnchor = document.createElement('a'); downloadAnchor.download = fileName; downloadAnchor.href = fileUrl; downloadAnchor.click(); showToast("ಗ್ಯಾಲರಿಗೆ ಸೇವ್ ಆಗಿದೆ! 🎉"); }, 'image/png'); }); }
+        function showToast(msg) { const toast = document.getElementById('toastMessage'); toast.innerText = msg; toast.style.display = 'block'; setTimeout(() => { toast.style.display = 'none'; }, 2000); }
+    </script>
+</body>
+</html>
